@@ -96,11 +96,14 @@ class QQConnectionConfig(BaseModel):
     webui_public_port: int = Field(default=6099, ge=1, le=65535)
     qrcode_path: str = "data/napcat-cache/qrcode.png"
     administrator_qq_ids: list[str] = Field(default_factory=list)
+    # 管理群：notify_administrators 在私聊通知管理员的同时，也会在这些群里发消息。
+    # 不要求启用任何编排连接；群号即为 Bot 可发消息的 QQ 群。
+    management_group_ids: list[str] = Field(default_factory=list)
     announcement_actions: list[str] = Field(
         default_factory=lambda: ["get_group_notice", "_get_group_notice"]
     )
 
-    @field_validator("administrator_qq_ids", mode="before")
+    @field_validator("administrator_qq_ids", "management_group_ids", mode="before")
     @classmethod
     def ids_as_strings(cls, value: object) -> object:
         if isinstance(value, list):

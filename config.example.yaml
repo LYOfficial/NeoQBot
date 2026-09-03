@@ -49,6 +49,8 @@ qq:
       webui_public_port: 6099
       qrcode_path: /app/napcat-cache/qrcode.png
       administrator_qq_ids: ["10001"]
+      # 管理群：notify_administrators 会把同一消息同时发到这些群；留空则不发群消息。
+      management_group_ids: []
       announcement_actions: [get_group_notice, _get_group_notice]
       search_feishu_bot_id: ""
 

@@ -2061,6 +2061,7 @@
       webui_public_port: 6099,
       qrcode_path: bundled ? "/app/napcat-cache/qrcode.png" : externalConnection.qrcode_path,
       administrator_qq_ids: [],
+      management_group_ids: [],
       announcement_actions: ["get_group_notice", "_get_group_notice"],
       search_feishu_bot_id: ""
     };
@@ -2218,6 +2219,7 @@
       '<label>Webhook Secret<input data-node-field="webhook_secret" data-sensitive type="password" placeholder="留空保持原值"></label>',
       '<label>请求超时（秒）<input data-node-field="request_timeout_seconds" data-sensitive type="number" min="0.1" step="0.1"></label>',
       '<label class="span-2">管理员 QQ（每行一个）<textarea data-node-field="administrator_qq_ids" rows="3"></textarea></label>',
+      '<label class="span-2">管理群（每行一个群号）<textarea data-node-field="management_group_ids" rows="3"></textarea></label>',
       '</div></section>',
       '<section class="node-detail-section"><div class="node-detail-section-title"><span>NapCat</span><h3>登录与 WebUI</h3></div><div class="form-grid">',
       '<label class="span-2">WebUI Base URL<input data-node-field="webui_base_url" data-sensitive></label>',
@@ -2297,6 +2299,7 @@
       setNodeDetailValue("webui_token", "");
       setNodeDetailValue("webhook_secret", "");
       setNodeDetailValue("administrator_qq_ids", listValue(draft.administrator_qq_ids));
+      setNodeDetailValue("management_group_ids", listValue(draft.management_group_ids));
       setNodeDetailValue("announcement_actions", listValue(draft.announcement_actions));
       if (!existing) {
         nodeDetailControl("id").addEventListener("input", function () {
@@ -2404,6 +2407,7 @@
       draft.webui_public_port = numberValue(nodeDetailControl("webui_public_port").value, 6099);
       draft.qrcode_path = nodeDetailControl("qrcode_path").value.trim();
       draft.administrator_qq_ids = splitList(nodeDetailControl("administrator_qq_ids").value);
+      draft.management_group_ids = splitList(nodeDetailControl("management_group_ids").value);
       draft.announcement_actions = splitList(nodeDetailControl("announcement_actions").value);
       draft.search_feishu_bot_id = nodeDetailControl("search_feishu_bot_id").value;
     } else if (dialogState.kind === "feishu_bot") {

@@ -112,9 +112,15 @@ class OneBotClient:
             return
         await self._call("send_private_msg", {"user_id": int(user_id), "message": message})
 
+    async def send_group_message(self, group_id: str, message: str) -> None:
+        if self.dry_run:
+            return
+        await self._call("send_group_msg", {"group_id": int(group_id), "message": message})
+
     async def notify_administrators(self, message: str) -> None:
-        if not self.config.administrator_qq_ids:
-            raise OneBotError("No administrator QQ IDs are configured")
+        # 私聊通知管理员，同时把同一消息发到配置的管理群。
+        if not self.config.administrator_qq_ids and not self.config.management_group_ids:
+            raise OneBotError("No administrator QQ IDs or management groups are configured")
         errors: list[str] = []
         delivered = 0
         for user_id in self.config.administrator_qq_ids:
@@ -123,6 +129,12 @@ class OneBotClient:
                 delivered += 1
             except Exception as exc:  # continue notifying the remaining administrators
                 errors.append(f"{user_id}: {exc}")
+        for group_id in self.config.management_group_ids:
+            try:
+                await self.send_group_message(group_id, message)
+                delivered += 1
+            except Exception as exc:  # continue posting to the remaining management groups
+                errors.append(f"group {group_id}: {exc}")
         if errors and delivered == 0:
             raise OneBotError("; ".join(errors))
 
