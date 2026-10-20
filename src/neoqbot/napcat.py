@@ -388,5 +388,9 @@ class NapCatWebUiClient:
         data = await self._post("api/QQLogin/RefreshQRcode")
         return data if isinstance(data, dict) else {}
 
+    async def relogin(self) -> dict[str, Any]:
+        """Ask NapCat to leave the current offline login flow and create a QR code."""
+        return await self.refresh_qrcode()
+
     async def close(self) -> None:
         await self._client.aclose()

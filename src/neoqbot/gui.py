@@ -31,6 +31,7 @@ from .config import (
     resolve_secret,
 )
 from .container import Container
+from .qq_status import classify_qq_connection
 from .security import FailureLimiter
 
 
@@ -1184,6 +1185,45 @@ def register_gui(
             "result": result,
         }
 
+    @app.post("/api/gui/integrations/qq/relogin")
+    async def gui_qq_relogin(
+        _: GuiSession = Depends(ready_admin_csrf),
+        bot_id: str | None = Query(default=None),
+    ) -> dict[str, Any]:
+        bot = get_settings().qq_bot(bot_id)
+        if bot is None:
+            raise HTTPException(status_code=404, detail="未知 QQ Bot")
+        path = Path(bot.qrcode_path)
+        before = await asyncio.to_thread(qrcode_fingerprint, path)
+        try:
+            result = await get_container().napcat_clients[bot.id].relogin()
+        except Exception as exc:
+            if "QQ Is Logined" in str(exc):
+                raise HTTPException(
+                    status_code=409,
+                    detail="QQ 当前仍在线，请先在手机 QQ 中退出该账号后再重新登录",
+                ) from exc
+            raise HTTPException(status_code=502, detail=f"退出当前 QQ 登录态失败：{exc}") from exc
+        deadline = time.monotonic() + 8
+        after = before
+        while time.monotonic() < deadline:
+            await asyncio.sleep(0.2)
+            after = await asyncio.to_thread(qrcode_fingerprint, path)
+            if after is not None and after != before:
+                break
+        if after is None or after == before:
+            raise HTTPException(
+                status_code=504,
+                detail="NapCat 已接收重新登录请求，但二维码文件未更新",
+            )
+        return {
+            "ok": True,
+            "bot_id": bot.id,
+            "changed": True,
+            "updated_at": after[0] / 1_000_000_000,
+            "result": result,
+        }
+
     @app.post("/api/gui/integrations/qq/webui-token")
     async def gui_qq_webui_token(
         _: GuiSession = Depends(ready_admin_csrf),
@@ -1246,21 +1286,9 @@ def register_gui(
                     if isinstance(napcat_result, BaseException)
                     else {"ok": True, **napcat_result}
                 )
-                if onebot_status.get("ok"):
-                    connection_state = "connected"
-                    connection_message = "QQ 已登录，OneBot 连接正常"
-                elif napcat_status.get("isOffline"):
-                    connection_state = "qq_offline"
-                    connection_message = "QQ 登录态存在，但客户端已离线"
-                elif napcat_status.get("isLogin"):
-                    connection_state = "qq_logged_in_onebot_unavailable"
-                    connection_message = "QQ 已登录，但 OneBot HTTP 服务不可用"
-                elif napcat_status.get("ok"):
-                    connection_state = "waiting_for_scan"
-                    connection_message = "NapCat 已连接，等待扫描二维码"
-                else:
-                    connection_state = "napcat_unreachable"
-                    connection_message = "NapCat WebUI 与 OneBot 均不可访问"
+                connection_state, connection_message = classify_qq_connection(
+                    onebot_status, napcat_status
+                )
             results.append(
                 {
                     "id": bot.id,

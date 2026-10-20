@@ -702,6 +702,27 @@
     $("qq-login-dialog").close();
   }
 
+  async function reloginQQ() {
+    if (!state.qqLoginBotId) return;
+    var button = $("qq-relogin");
+    button.disabled = true;
+    $("qq-login-state").textContent = "正在退出当前 QQ 登录态并生成新二维码…";
+    $("qq-login-state").classList.remove("success");
+    $("qq-qr-stage").classList.remove("success");
+    try {
+      await api("/api/gui/integrations/qq/relogin?bot_id=" + encodeURIComponent(state.qqLoginBotId), { method: "POST" });
+      state.qqQrLastRefresh = 0;
+      await refreshQQCode(false);
+      await refreshQQLoginState();
+      showToast("已退出当前 QQ 登录态，请使用新二维码登录");
+    } catch (error) {
+      $("qq-login-state").textContent = error.message;
+      showToast(error.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
   async function feishuAction(botId, action, button, output) {
     button.disabled = true;
     output.textContent = action === "login" ? "等待飞书 CLI 返回授权信息…" : "正在退出飞书…";
@@ -1954,6 +1975,7 @@
     else showToast("没有找到匹配的编排节点", true);
   });
   $("qq-login-close").addEventListener("click", closeQQLogin);
+  $("qq-relogin").addEventListener("click", reloginQQ);
   $("qq-qrcode-refresh").addEventListener("click", function () { refreshQQCode(true); });
   $("qq-token-copy").addEventListener("click", async function () {
     if (!state.qqLoginBotId) return;
