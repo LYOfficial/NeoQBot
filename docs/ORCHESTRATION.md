@@ -73,6 +73,8 @@ HTTP Client 使用其 Token 对事件原文生成 HMAC-SHA1 `X-Signature`，不�
 
 一个 Bot 可以连接多个群，多个 Bot 也可以连接同一个群。业务记录使用 `bot_id + group_id`
 隔离，因此相同消息 ID 在不同 Bot 下不会冲突。每条有效的 QQ Bot→QQ群连接都有独立 `tasks`：
+资源节点只要求内部 `id` 唯一，显示名称和平台标识可以重复；如果同一 QQ Bot 已经连接某个群号，
+再次连接同一群号会被拒绝，避免同一 Bot 的事务分工产生歧义。
 
 ```yaml
 orchestration:

@@ -328,6 +328,62 @@ class SettingsAssignmentTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             Settings.model_validate(config)
 
+    def test_same_platform_identifier_can_back_distinct_resource_nodes(self) -> None:
+        config = assignment_settings().model_dump(mode="json")
+        config["qq"]["bots"].append(
+            {
+                "id": "observer",
+                "name": "Observer",
+                "enabled": True,
+                "connection_mode": "external",
+            }
+        )
+        config["orchestration"]["resources"].append(
+            {
+                "id": "group-record-copy",
+                "kind": "qq_group",
+                "name": "Record group",
+                "external_id": "100",
+            }
+        )
+        config["orchestration"]["edges"].append(
+            {
+                "id": "observer-record-copy",
+                "source": "qq-bot:observer",
+                "target": "group-record-copy",
+                "relation": "observes",
+            }
+        )
+
+        settings = Settings.model_validate(config)
+
+        self.assertEqual(
+            [item.resource_id for item in settings.qq_group_assignments("observer")],
+            ["group-record-copy"],
+        )
+
+    def test_same_bot_cannot_have_two_enabled_edges_for_one_group_number(self) -> None:
+        config = assignment_settings().model_dump(mode="json")
+        config["orchestration"]["resources"].append(
+            {
+                "id": "group-record-copy",
+                "kind": "qq_group",
+                "name": "Record group copy",
+                "external_id": "100",
+            }
+        )
+        config["orchestration"]["edges"].append(
+            {
+                "id": "worker-record-copy",
+                "source": "qq-bot:worker",
+                "target": "group-record-copy",
+                "relation": "manages",
+            }
+        )
+
+        with self.assertRaisesRegex(ValidationError, "同一个 QQ Bot 与同一个群号"):
+            Settings.model_validate(config)
+
     def test_all_bot_nodes_can_be_removed(self) -> None:
         settings = Settings.model_validate(
             {

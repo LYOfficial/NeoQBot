@@ -389,13 +389,6 @@ class OrchestrationConfig(BaseModel):
         resource_ids = [resource.id for resource in self.resources]
         if len(resource_ids) != len(set(resource_ids)):
             raise ValueError("orchestration.resources 中的 id 必须唯一")
-        external_resources = [
-            (resource.kind, resource.external_id)
-            for resource in self.resources
-            if resource.external_id
-        ]
-        if len(external_resources) != len(set(external_resources)):
-            raise ValueError("同一类型的编排资源不能使用重复的平台标识")
         edge_ids = [edge.id for edge in self.edges]
         if len(edge_ids) != len(set(edge_ids)):
             raise ValueError("orchestration.edges 中的 id 必须唯一")
@@ -653,9 +646,14 @@ class Settings(BaseSettings):
             )
             if is_assignment:
                 edge.tasks = edge.tasks or QQTaskConfig()
-                assignment_key = (edge.source, edge.target)
+                assignment_key = (
+                    edge.source,
+                    target.external_id if target.external_id else edge.target,
+                )
                 if edge.enabled and assignment_key in active_assignments:
-                    raise ValueError(f"QQ Bot 与 QQ 群之间只能有一条启用的事务分工连接：{edge.id}")
+                    raise ValueError(
+                        f"同一个 QQ Bot 与同一个群号只能有一条启用的事务分工连接：{edge.id}"
+                    )
                 if edge.enabled:
                     active_assignments.add(assignment_key)
             elif edge.tasks is not None:

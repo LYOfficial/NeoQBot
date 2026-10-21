@@ -804,6 +804,28 @@
     return { x: columns[kind] || 80, y: laneOffset + (index % 5) * 145 };
   }
 
+  function orchestrationPosition(position, kind, index, occupied) {
+    var fallback = defaultNodePosition(kind, index);
+    var x = Number(position && position.x);
+    var y = Number(position && position.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      x = fallback.x;
+      y = fallback.y;
+    }
+    x = Math.min(1560, Math.max(20, x));
+    y = Math.min(976, Math.max(20, y));
+    var key = x + ":" + y;
+    var attempt = 0;
+    while (occupied.has(key) && attempt < 100) {
+      attempt++;
+      x = Math.min(1560, fallback.x + (attempt % 5) * 250);
+      y = Math.min(976, fallback.y + Math.floor(attempt / 5) * 145);
+      key = x + ":" + y;
+    }
+    occupied.add(key);
+    return { x: x, y: y };
+  }
+
   function nextEdgeId(source, target, relation, edges) {
     var prefix = safeIdentifier("edge-" + source + "-" + target + "-" + relation, "edge").slice(0, 82);
     return uniqueIdentifier(prefix, (edges || state.orchestrationEdges).map(function (edge) { return edge.id; }));
@@ -817,17 +839,20 @@
     config.orchestration.layout = config.orchestration.layout || {};
 
     var nodes = [];
+    var occupiedPositions = new Set();
     config.qq.bots.forEach(function (bot, index) {
       nodes.push({ id: "qq-bot:" + bot.id, kind: "qq_bot", name: bot.name, enabled: bot.enabled, ref: bot });
-      if (!config.orchestration.layout["qq-bot:" + bot.id]) config.orchestration.layout["qq-bot:" + bot.id] = defaultNodePosition("qq_bot", index);
+      var qqNodeId = "qq-bot:" + bot.id;
+      config.orchestration.layout[qqNodeId] = orchestrationPosition(config.orchestration.layout[qqNodeId], "qq_bot", index, occupiedPositions);
     });
     config.feishu.bots.forEach(function (bot, index) {
       nodes.push({ id: "feishu-bot:" + bot.id, kind: "feishu_bot", name: bot.name, enabled: bot.enabled, ref: bot });
-      if (!config.orchestration.layout["feishu-bot:" + bot.id]) config.orchestration.layout["feishu-bot:" + bot.id] = defaultNodePosition("feishu_bot", index);
+      var feishuNodeId = "feishu-bot:" + bot.id;
+      config.orchestration.layout[feishuNodeId] = orchestrationPosition(config.orchestration.layout[feishuNodeId], "feishu_bot", index, occupiedPositions);
     });
     config.orchestration.resources.forEach(function (resource, index) {
       nodes.push({ id: resource.id, kind: resource.kind, name: resource.name, enabled: resource.enabled, ref: resource });
-      if (!config.orchestration.layout[resource.id]) config.orchestration.layout[resource.id] = defaultNodePosition(resource.kind, index);
+      config.orchestration.layout[resource.id] = orchestrationPosition(config.orchestration.layout[resource.id], resource.kind, index, occupiedPositions);
     });
     var resources = new Map(config.orchestration.resources.map(function (resource) { return [resource.id, resource]; }));
     config.orchestration.edges.forEach(function (edge) {
