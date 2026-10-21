@@ -14,6 +14,9 @@
     qqLoginPolling: false,
     qqQrRefreshing: false,
     qqQrLastRefresh: 0,
+    qqQrNotBefore: 0,
+    qqQrRestartStartedAt: 0,
+    qqQrRestartTimer: null,
     settingsStep: "llm",
     settingsDirty: false,
     orchestrationNodes: [],
@@ -610,7 +613,9 @@
     image.onerror = function () {
       image.classList.remove("loaded");
       placeholder.classList.remove("hidden");
-      $("qq-qr-caption").textContent = "二维码尚未生成，请确认 qq-bridge 正在运行。";
+      $("qq-qr-caption").textContent = state.qqQrNotBefore
+        ? "NapCat 正在生成新的二维码，请稍候…"
+        : "二维码尚未生成，请确认 qq-bridge 正在运行。";
     };
     var refreshStamp = Date.now();
     state.qqQrLastRefresh = refreshStamp;
@@ -618,12 +623,14 @@
       if (requestNewCode) {
         await api("/api/gui/integrations/qq/qrcode/refresh?bot_id=" + encodeURIComponent(state.qqLoginBotId), { method: "POST" });
       }
-      image.src = "/api/gui/integrations/qq/qrcode?bot_id=" + encodeURIComponent(state.qqLoginBotId) + "&t=" + refreshStamp;
+      var notBefore = state.qqQrNotBefore ? "&not_before=" + encodeURIComponent(state.qqQrNotBefore) : "";
+      image.src = "/api/gui/integrations/qq/qrcode?bot_id=" + encodeURIComponent(state.qqLoginBotId) + "&t=" + refreshStamp + notBefore;
     } catch (error) {
       refreshFailure = error.message;
       $("qq-qr-caption").textContent = error.message;
       showToast(error.message, true);
-      image.src = "/api/gui/integrations/qq/qrcode?bot_id=" + encodeURIComponent(state.qqLoginBotId) + "&t=" + refreshStamp;
+      var notBefore = state.qqQrNotBefore ? "&not_before=" + encodeURIComponent(state.qqQrNotBefore) : "";
+      image.src = "/api/gui/integrations/qq/qrcode?bot_id=" + encodeURIComponent(state.qqLoginBotId) + "&t=" + refreshStamp + notBefore;
     } finally {
       state.qqQrRefreshing = false;
     }
@@ -664,7 +671,9 @@
         if (Date.now() - state.qqQrLastRefresh > 105000) refreshQQCode(true);
       }
     } catch (error) {
-      $("qq-login-state").textContent = "状态检查失败：" + error.message;
+      $("qq-login-state").textContent = state.qqQrRestartStartedAt && Date.now() - state.qqQrRestartStartedAt < 45000
+        ? "NapCat 正在重启登录服务，请稍候…"
+        : "状态检查失败：" + error.message;
       $("qq-login-state").classList.remove("success");
       $("qq-qr-stage").classList.remove("success");
     } finally {
@@ -684,6 +693,8 @@
     $("qq-login-state").classList.remove("success");
     $("qq-qr-stage").classList.remove("success");
     state.qqQrLastRefresh = 0;
+    state.qqQrNotBefore = 0;
+    state.qqQrRestartStartedAt = 0;
     $("qq-login-dialog").showModal();
     refreshQQCode(true);
     refreshQQLoginState();
@@ -693,10 +704,14 @@
 
   function closeQQLogin() {
     window.clearInterval(state.qqLoginTimer);
+    window.clearInterval(state.qqQrRestartTimer);
     state.qqLoginTimer = null;
+    state.qqQrRestartTimer = null;
     state.qqLoginBotId = "";
     state.qqLoginPolling = false;
     state.qqQrRefreshing = false;
+    state.qqQrNotBefore = 0;
+    state.qqQrRestartStartedAt = 0;
     $("qq-qrcode").removeAttribute("src");
     $("qq-qrcode").classList.remove("loaded");
     $("qq-login-dialog").close();
@@ -710,10 +725,21 @@
     $("qq-login-state").classList.remove("success");
     $("qq-qr-stage").classList.remove("success");
     try {
-      await api("/api/gui/integrations/qq/relogin?bot_id=" + encodeURIComponent(state.qqLoginBotId), { method: "POST" });
-      state.qqQrLastRefresh = 0;
+      var relogin = await api("/api/gui/integrations/qq/relogin?bot_id=" + encodeURIComponent(state.qqLoginBotId), { method: "POST" });
+      state.qqQrNotBefore = Number(relogin.not_before || Date.now() / 1000);
+      state.qqQrRestartStartedAt = Date.now();
+      state.qqQrLastRefresh = Date.now();
       await refreshQQCode(false);
       await refreshQQLoginState();
+      window.clearInterval(state.qqQrRestartTimer);
+      state.qqQrRestartTimer = window.setInterval(function () {
+        if (!state.qqLoginBotId || Date.now() - state.qqQrRestartStartedAt > 45000) {
+          window.clearInterval(state.qqQrRestartTimer);
+          state.qqQrRestartTimer = null;
+          return;
+        }
+        refreshQQCode(false);
+      }, 1500);
       showToast("已退出当前 QQ 登录态，请使用新二维码登录");
     } catch (error) {
       $("qq-login-state").textContent = error.message;

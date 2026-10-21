@@ -17,6 +17,8 @@ class QQLoginRecoveryTests(unittest.IsolatedAsyncioTestCase):
             requests.append(request.url.path)
             if request.url.path == "/api/auth/login":
                 return httpx.Response(200, json={"data": {"Credential": "credential"}})
+            if request.url.path == "/api/QQLogin/RestartNapCat":
+                return httpx.Response(200, json={"data": {"message": "restarting"}})
             if request.url.path == "/api/QQLogin/RefreshQRcode":
                 return httpx.Response(200, json={"data": {"qrcodeurl": "qrcode"}})
             return httpx.Response(404)
@@ -30,8 +32,18 @@ class QQLoginRecoveryTests(unittest.IsolatedAsyncioTestCase):
         finally:
             await client.close()
 
-        self.assertEqual(result, {"qrcodeurl": "qrcode"})
-        self.assertEqual(requests, ["/api/auth/login", "/api/QQLogin/RefreshQRcode"])
+        self.assertEqual(
+            result,
+            {"restart": {"message": "restarting"}, "qrcode": {"qrcodeurl": "qrcode"}},
+        )
+        self.assertEqual(
+            requests,
+            [
+                "/api/auth/login",
+                "/api/QQLogin/RestartNapCat",
+                "/api/QQLogin/RefreshQRcode",
+            ],
+        )
 
     def test_offline_napcat_state_wins_over_stale_onebot_health(self) -> None:
         state, message = classify_qq_connection(

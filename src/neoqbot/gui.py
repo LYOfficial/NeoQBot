@@ -1104,7 +1104,7 @@ def register_gui(
             raise HTTPException(status_code=404, detail="未知任务")
         return {"ok": True, "result": result}
 
-    def qq_qrcode_path(bot_id: str | None) -> Path:
+    def qq_qrcode_path(bot_id: str | None, not_before: float | None = None) -> Path:
         bot = get_settings().qq_bot(bot_id)
         if bot is None:
             raise HTTPException(status_code=404, detail="未知 QQ Bot")
@@ -1113,6 +1113,8 @@ def register_gui(
             if not path.is_file():
                 raise HTTPException(status_code=404, detail="NapCat 尚未生成登录二维码")
             stat = path.stat()
+            if not_before is not None and stat.st_mtime <= not_before:
+                raise HTTPException(status_code=425, detail="NapCat 正在生成新的登录二维码")
             if stat.st_size > 5 * 1024 * 1024:
                 raise HTTPException(status_code=422, detail="NapCat 二维码文件异常")
             age_seconds = max(0.0, time.time() - stat.st_mtime)
@@ -1142,8 +1144,9 @@ def register_gui(
     async def gui_qq_qrcode(
         _: GuiSession = Depends(ready_admin),
         bot_id: str | None = Query(default=None),
+        not_before: float | None = Query(default=None, ge=0),
     ) -> FileResponse:
-        path = await asyncio.to_thread(qq_qrcode_path, bot_id)
+        path = await asyncio.to_thread(qq_qrcode_path, bot_id, not_before)
         return FileResponse(
             path,
             media_type="image/png",
@@ -1193,8 +1196,7 @@ def register_gui(
         bot = get_settings().qq_bot(bot_id)
         if bot is None:
             raise HTTPException(status_code=404, detail="未知 QQ Bot")
-        path = Path(bot.qrcode_path)
-        before = await asyncio.to_thread(qrcode_fingerprint, path)
+        requested_at = time.time()
         try:
             result = await get_container().napcat_clients[bot.id].relogin()
         except Exception as exc:
@@ -1204,23 +1206,11 @@ def register_gui(
                     detail="QQ 当前仍在线，请先在手机 QQ 中退出该账号后再重新登录",
                 ) from exc
             raise HTTPException(status_code=502, detail=f"退出当前 QQ 登录态失败：{exc}") from exc
-        deadline = time.monotonic() + 8
-        after = before
-        while time.monotonic() < deadline:
-            await asyncio.sleep(0.2)
-            after = await asyncio.to_thread(qrcode_fingerprint, path)
-            if after is not None and after != before:
-                break
-        if after is None or after == before:
-            raise HTTPException(
-                status_code=504,
-                detail="NapCat 已接收重新登录请求，但二维码文件未更新",
-            )
         return {
             "ok": True,
             "bot_id": bot.id,
-            "changed": True,
-            "updated_at": after[0] / 1_000_000_000,
+            "restarting": True,
+            "not_before": requested_at,
             "result": result,
         }
 

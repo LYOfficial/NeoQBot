@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import json
@@ -389,8 +390,17 @@ class NapCatWebUiClient:
         return data if isinstance(data, dict) else {}
 
     async def relogin(self) -> dict[str, Any]:
-        """Ask NapCat to leave the current offline login flow and create a QR code."""
-        return await self.refresh_qrcode()
+        """Reset NapCat's login worker so a stale login can return to QR login."""
+        data = await self._post("api/QQLogin/RestartNapCat")
+        await asyncio.sleep(0.5)
+        try:
+            qrcode = await self.refresh_qrcode()
+        except Exception:
+            qrcode = {}
+        return {
+            "restart": data if isinstance(data, dict) else {},
+            "qrcode": qrcode,
+        }
 
     async def close(self) -> None:
         await self._client.aclose()
